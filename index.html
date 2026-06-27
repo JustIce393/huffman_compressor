@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lossless LZW Coder</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-dark: #0b0c16;
+            --card-bg: rgba(22, 24, 47, 0.7);
+            --primary: #8a2be2;
+            --primary-hover: #9d4edd;
+            --accent: #00f5ff;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --success: #10b981;
+            --error: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Abstract Background Elements */
+        body::before {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(138, 43, 226, 0.3) 0%, rgba(0, 0, 0, 0) 70%);
+            top: 10%;
+            left: 10%;
+            z-index: -1;
+            filter: blur(40px);
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(0, 245, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+            bottom: 10%;
+            right: 10%;
+            z-index: -1;
+            filter: blur(40px);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 700px;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        header h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2.8rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #ffffff 30%, var(--accent) 70%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: 300;
+        }
+
+        /* Tabs Navigation */
+        .tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 0.3rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 1.5rem;
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            padding: 0.8rem;
+            cursor: pointer;
+            border-radius: 9px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
+        }
+
+        /* Card container */
+        .card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            padding: 2.5rem;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .panel {
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Upload Area */
+        .dropzone {
+            border: 2px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 16px;
+            padding: 3rem 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.01);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        .dropzone:hover, .dropzone.dragover {
+            border-color: var(--accent);
+            background: rgba(0, 245, 255, 0.02);
+            box-shadow: 0 0 15px rgba(0, 245, 255, 0.1);
+        }
+
+        .dropzone svg {
+            width: 48px;
+            height: 48px;
+            fill: none;
+            stroke: var(--text-muted);
+            stroke-width: 1.5;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .dropzone:hover svg {
+            stroke: var(--accent);
+            transform: translateY(-5px);
+        }
+
+        .dropzone p {
+            font-size: 1rem;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+
+        .dropzone span {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        /* File Info Box */
+        .file-info {
+            display: none;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .file-info-icon {
+            background: rgba(138, 43, 226, 0.1);
+            border-radius: 8px;
+            padding: 0.6rem;
+            margin-right: 1rem;
+        }
+
+        .file-info-icon svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--primary);
+            fill: none;
+        }
+
+        .file-details {
+            flex-grow: 1;
+            min-width: 0; /* allows text truncation */
+        }
+
+        .file-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-size {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.1rem;
+        }
+
+        .remove-file-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 0.5rem;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+
+        .remove-file-btn:hover {
+            color: var(--error);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        /* Real-time Frequencies Panel */
+        .realtime-section {
+            display: none;
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .realtime-section h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .freq-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.6rem;
+            font-size: 0.9rem;
+        }
+
+        .freq-char {
+            width: 70px;
+            font-weight: 600;
+            color: var(--text-main);
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .freq-bar-bg {
+            flex-grow: 1;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            margin: 0 1rem;
+            overflow: hidden;
+        }
+
+        .freq-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+            border-radius: 4px;
+            transition: width 0.5s ease-out;
+            width: 0%;
+        }
+
+        .freq-count {
+            width: 100px;
+            text-align: right;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Codebook Table container */
+        .codebook-section {
+            display: none;
+            margin-top: 1.5rem;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .codebook-section h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .codebook-container {
+            max-height: 180px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        .codebook-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+
+        .codebook-table th, .codebook-table td {
+            padding: 0.6rem 0.8rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .codebook-table th {
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-muted);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .codebook-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .code-value {
+            font-family: 'Space Grotesk', monospace;
+            color: var(--accent);
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        /* Buttons */
+        .btn {
+            width: 100%;
+            background: linear-gradient(135deg, var(--primary) 0%, #6f2dbd 100%);
+            color: white;
+            border: none;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            padding: 1rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(138, 43, 226, 0.5);
+            background: linear-gradient(135deg, var(--primary-hover) 0%, var(--primary) 100%);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* Result Panel */
+        .result-panel {
+            display: none;
+            margin-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1.5rem;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.3rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .stat-value.highlight {
+            color: var(--accent);
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .download-btn:hover {
+            background: linear-gradient(135deg, #10b981 0%, #10b981 100%);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+        }
+
+        /* Compatibility footer message */
+        .footer-note {
+            text-align: center;
+            margin-top: 2.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+
+        .footer-note svg {
+            width: 16px;
+            height: 16px;
+            stroke: var(--accent);
+            fill: none;
+        }
+
+        /* Error notification */
+        .toast-error {
+            display: none;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid var(--error);
+            border-radius: 12px;
+            color: #fca5a5;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Lossless LZW Coder</h1>
+            <p>High-efficiency LZW (Lempel-Ziv-Welch) local file compression</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('compress')">COMPRESS</button>
+            <button class="tab-btn" onclick="switchTab('decompress')">DECOMPRESS</button>
+        </div>
+
+        <div class="card">
+            <!-- COMPRESS PANEL -->
+            <div id="compress-panel" class="panel active">
+                <div class="dropzone" id="compress-dropzone" onclick="triggerFileInput('compress')">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 002-2v-4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <p>Drag & drop your file here or click to browse</p>
+                    <span>Supports any text or binary files</span>
+                </div>
+                <input type="file" id="compress-file-input" class="file-input" onchange="handleFileSelect(this, 'compress')">
+
+                <div class="file-info" id="compress-file-info">
+                    <div class="file-info-icon">
+                        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14 2 14 8 20 8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-name" id="compress-filename">filename.txt</div>
+                        <div class="file-size" id="compress-filesize">0 bytes</div>
+                    </div>
+                    <button class="remove-file-btn" onclick="clearFile('compress')">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+
+                <!-- REAL-TIME ANALYSIS (COMPRESS) -->
+                <div class="realtime-section" id="compress-realtime">
+                    <h3>Character Frequency Analysis</h3>
+                    <div id="compress-freq-list">
+                        <!-- populated dynamically -->
+                    </div>
+                </div>
+
+                <button class="btn" id="compress-action-btn" onclick="executeCompression()" disabled>
+                    <div class="spinner" id="compress-spinner"></div>
+                    <span>Compress File</span>
+                </button>
+
+                <div class="toast-error" id="compress-error">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <span id="compress-error-text">An error occurred.</span>
+                </div>
+
+                <!-- COMPRESS RESULT -->
+                <div class="result-panel" id="compress-result">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Compressed Size</div>
+                            <div class="stat-value" id="comp-stat-size">0 bytes</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Space Saved</div>
+                            <div class="stat-value highlight" id="comp-stat-ratio">0.00%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">LZW Codes Generated</div>
+                            <div class="stat-value" id="comp-stat-unique">0 codes</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Time Taken</div>
+                            <div class="stat-value" id="comp-stat-time">0 ms</div>
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Dictionary -->
+                    <div class="codebook-section" id="compress-codebook-section">
+                        <h3>Generated LZW Dictionary Entries</h3>
+                        <div class="codebook-container">
+                            <table class="codebook-table">
+                                <thead>
+                                    <tr>
+                                        <th>Assigned Code</th>
+                                        <th>Byte Sequence</th>
+                                        <th>Text Representation</th>
+                                        <th>Length</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="codebook-body">
+                                    <!-- populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <button style="margin-top: 1.5rem;" class="btn download-btn" id="compress-download-btn">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        Download Compressed File (.huff)
+                    </button>
+                </div>
+            </div>
+
+            <!-- DECOMPRESS PANEL -->
+            <div id="decompress-panel" class="panel">
+                <div class="dropzone" id="decompress-dropzone" onclick="triggerFileInput('decompress')">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 8v8M12 16l3-3M12 16l-3-3" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 002-2v-4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <p>Drag & drop your .huff file here or click to browse</p>
+                    <span>Compatible with .huff LZW compressed archives</span>
+                </div>
+                <input type="file" id="decompress-file-input" class="file-input" accept=".huff" onchange="handleFileSelect(this, 'decompress')">
+
+                <div class="file-info" id="decompress-file-info">
+                    <div class="file-info-icon">
+                        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14 2 14 8 20 8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-name" id="decompress-filename">filename.huff</div>
+                        <div class="file-size" id="decompress-filesize">0 bytes</div>
+                    </div>
+                    <button class="remove-file-btn" onclick="clearFile('decompress')">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+
+                <!-- REAL-TIME ANALYSIS (DECOMPRESS) -->
+                <div class="realtime-section" id="decompress-realtime">
+                    <h3>Header Data Inspection</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">File Type</div>
+                            <div class="stat-value" id="dec-header-magic">LZW</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">16-bit Code Count</div>
+                            <div class="stat-value highlight" id="dec-header-codes">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn" id="decompress-action-btn" onclick="executeDecompression()" disabled>
+                    <div class="spinner" id="decompress-spinner"></div>
+                    <span>Decompress File</span>
+                </button>
+
+                <div class="toast-error" id="decompress-error">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <span id="decompress-error-text">An error occurred.</span>
+                </div>
+
+                <!-- DECOMPRESS RESULT -->
+                <div class="result-panel" id="decompress-result">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Restored Size</div>
+                            <div class="stat-value" id="dec-stat-size">0 bytes</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Time Taken</div>
+                            <div class="stat-value" id="dec-stat-time">0 ms</div>
+                        </div>
+                    </div>
+                    <button class="btn download-btn" id="decompress-download-btn">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        Download Restored File
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-note">
+            <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Fully binary-compatible with the C++ huffman_compressor.exe CLI</span>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = {
+            compress: null,
+            decompress: null
+        };
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
+
+            if (tab === 'compress') {
+                document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
+                document.getElementById('compress-panel').classList.add('active');
+            } else {
+                document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
+                document.getElementById('decompress-panel').classList.add('active');
+            }
+        }
+
+        function triggerFileInput(type) {
+            document.getElementById(`${type}-file-input`).click();
+        }
+
+        ['compress', 'decompress'].forEach(type => {
+            const dropzone = document.getElementById(`${type}-dropzone`);
+            
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('dragover');
+            });
+
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('dragover');
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('dragover');
+                if (e.dataTransfer.files.length > 0) {
+                    const input = document.getElementById(`${type}-file-input`);
+                    input.files = e.dataTransfer.files;
+                    handleFileSelect(input, type);
+                }
+            });
+        });
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function handleFileSelect(input, type) {
+            const file = input.files[0];
+            if (!file) return;
+
+            selectedFiles[type] = file;
+
+            document.getElementById(`${type}-dropzone`).style.display = 'none';
+            document.getElementById(`${type}-filename`).textContent = file.name;
+            document.getElementById(`${type}-filesize`).textContent = formatBytes(file.size);
+            document.getElementById(`${type}-file-info`).style.display = 'flex';
+            document.getElementById(`${type}-action-btn`).removeAttribute('disabled');
+            
+            document.getElementById(`${type}-result`).style.display = 'none';
+            document.getElementById(`${type}-error`).style.display = 'none';
+
+            analyzeFileRealtime(file, type);
+        }
+
+        function analyzeFileRealtime(file, type) {
+            const reader = new FileReader();
+
+            if (type === 'compress') {
+                reader.onload = function(e) {
+                    const buffer = e.target.result;
+                    const bytes = new Uint8Array(buffer);
+                    
+                    const frequencies = {};
+                    for (let i = 0; i < bytes.length; i++) {
+                        frequencies[bytes[i]] = (frequencies[bytes[i]] || 0) + 1;
+                    }
+
+                    const sorted = Object.entries(frequencies).sort((a, b) => b[1] - a[1]);
+                    const top5 = sorted.slice(0, 5);
+
+                    const listContainer = document.getElementById('compress-freq-list');
+                    listContainer.innerHTML = '';
+
+                    if (bytes.length === 0) {
+                        listContainer.innerHTML = '<div style="color:var(--text-muted); font-size:0.9rem;">File is empty.</div>';
+                    } else {
+                        top5.forEach(([byteVal, count]) => {
+                            const byte = parseInt(byteVal);
+                            const pct = ((count / bytes.length) * 100).toFixed(1);
+                            let charName = String.fromCharCode(byte);
+                            if (byte < 32 || byte > 126) {
+                                charName = `0x${byte.toString(16).toUpperCase().padStart(2, '0')}`;
+                            } else if (charName === ' ') {
+                                charName = 'Space';
+                            }
+
+                            const row = document.createElement('div');
+                            row.className = 'freq-row';
+                            row.innerHTML = `
+                                <span class="freq-char">${charName}</span>
+                                <div class="freq-bar-bg">
+                                    <div class="freq-bar-fill" style="width: ${pct}%"></div>
+                                </div>
+                                <span class="freq-count">${count} (${pct}%)</span>
+                            `;
+                            listContainer.appendChild(row);
+                        });
+                    }
+
+                    document.getElementById('compress-realtime').style.display = 'block';
+                };
+                reader.readAsArrayBuffer(file);
+
+            } else if (type === 'decompress') {
+                reader.onload = function(e) {
+                    try {
+                        const buffer = e.target.result;
+                        const bytes = new Uint8Array(buffer);
+                        
+                        if (bytes.length < 4 || bytes[0] !== 76 || bytes[1] !== 90 || bytes[2] !== 87 || bytes[3] !== 1) {
+                            throw new Error("Invalid LZW signature: Not a valid .huff LZW file.");
+                        }
+
+                        const numCodes = (bytes.length - 4) / 2;
+
+                        document.getElementById('dec-header-magic').textContent = "LZW (v1)";
+                        document.getElementById('dec-header-codes').textContent = numCodes;
+                        document.getElementById('decompress-realtime').style.display = 'block';
+
+                    } catch (err) {
+                        document.getElementById('decompress-error-text').textContent = err.message;
+                        document.getElementById('decompress-error').style.display = 'flex';
+                        document.getElementById('decompress-realtime').style.display = 'none';
+                        document.getElementById('decompress-action-btn').setAttribute('disabled', 'true');
+                    }
+                };
+                reader.readAsArrayBuffer(file.slice(0, 1000));
+            }
+        }
+
+        function clearFile(type) {
+            selectedFiles[type] = null;
+            document.getElementById(`${type}-file-input`).value = '';
+            document.getElementById(`${type}-file-info`).style.display = 'none';
+            document.getElementById(`${type}-dropzone`).style.display = 'block';
+            document.getElementById(`${type}-action-btn`).setAttribute('disabled', 'true');
+            document.getElementById(`${type}-result`).style.display = 'none';
+            document.getElementById(`${type}-error`).style.display = 'none';
+            document.getElementById(`${type}-realtime`).style.display = 'none';
+        }
+
+        // --- LZW ALGORITHM IN JAVASCRIPT ---
+
+        function compressData(uint8Array) {
+            if (uint8Array.length === 0) {
+                const outBuffer = new ArrayBuffer(4);
+                const outBytes = new Uint8Array(outBuffer);
+                outBytes[0] = 76; outBytes[1] = 90; outBytes[2] = 87; outBytes[3] = 1;
+                return {
+                    data: outBytes,
+                    uniqueBytes: 0,
+                    dictionaryEntries: []
+                };
+            }
+
+            const outputCodes = [];
+            const dict = new Map();
+            
+            let nextCode = 257;
+            const RESET_CODE = 256;
+            const MAX_CODES = 65536;
+
+            let currentCode = uint8Array[0];
+            const dictRecords = []; // UI dictionary list
+
+            // Keep track of full sequence arrays to render in UI
+            const codeToSeq = Array.from({ length: 256 }, (_, i) => [i]);
+
+            for (let i = 1; i < uint8Array.length; ++i) {
+                const nextChar = uint8Array[i];
+                const key = (currentCode << 8) | nextChar;
+
+                if (dict.has(key)) {
+                    currentCode = dict.get(key);
+                } else {
+                    outputCodes.push(currentCode);
+
+                    if (nextCode < MAX_CODES) {
+                        dict.set(key, nextCode);
+                        
+                        const prefixSeq = codeToSeq[currentCode] || [currentCode];
+                        const newSeq = [...prefixSeq, nextChar];
+                        codeToSeq[nextCode] = newSeq;
+
+                        if (dictRecords.length < 1000) {
+                            dictRecords.push({
+                                code: nextCode,
+                                seq: newSeq
+                            });
+                        }
+                        
+                        nextCode++;
+                    }
+
+                    if (nextCode >= MAX_CODES) {
+                        outputCodes.push(RESET_CODE);
+                        dict.clear();
+                        codeToSeq.length = 256; // clear code sequences
+                        nextCode = 257;
+                    }
+
+                    currentCode = nextChar;
+                }
+            }
+            outputCodes.push(currentCode);
+
+            // Serialize
+            const totalSize = 4 + (outputCodes.length * 2);
+            const outBuffer = new ArrayBuffer(totalSize);
+            const view = new DataView(outBuffer);
+            const outBytes = new Uint8Array(outBuffer);
+
+            outBytes[0] = 76;  // 'L'
+            outBytes[1] = 90;  // 'Z'
+            outBytes[2] = 87;  // 'W'
+            outBytes[3] = 1;   // Version
+
+            for (let i = 0; i < outputCodes.length; ++i) {
+                view.setUint16(4 + (i * 2), outputCodes[i], true);
+            }
+
+            return {
+                data: outBytes,
+                uniqueBytes: outputCodes.length,
+                dictionaryEntries: dictRecords
+            };
+        }
+
+        function decompressData(compressedBytes) {
+            if (compressedBytes.length < 4) {
+                throw new Error("Invalid LZW file: smaller than header size.");
+            }
+
+            if (compressedBytes[0] !== 76 || compressedBytes[1] !== 90 || compressedBytes[2] !== 87 || compressedBytes[3] !== 1) {
+                throw new Error("Invalid LZW format: missing magic bytes 'LZW'.");
+            }
+
+            const numCodes = (compressedBytes.length - 4) / 2;
+            if (numCodes === 0) {
+                return new Uint8Array(0);
+            }
+
+            const view = new DataView(compressedBytes.buffer, compressedBytes.byteOffset, compressedBytes.byteLength);
+            const codes = new Uint16Array(numCodes);
+            for (let i = 0; i < numCodes; ++i) {
+                codes[i] = view.getUint16(4 + (i * 2), true);
+            }
+
+            const output = [];
+            const dict = new Array(65536);
+            
+            let nextCode = 257;
+            const RESET_CODE = 256;
+            const MAX_CODES = 65536;
+
+            let oldCode = codes[0];
+            let finChar = oldCode;
+            output.push(finChar);
+
+            const getString = (code, outArr) => {
+                const localStack = [];
+                while (code >= 257) {
+                    if (!dict[code]) break;
+                    localStack.push(dict[code].character);
+                    code = dict[code].parent;
+                }
+                localStack.push(code);
+                for (let i = localStack.length - 1; i >= 0; --i) {
+                    outArr.push(localStack[i]);
+                }
+            };
+
+            for (let i = 1; i < codes.length; ++i) {
+                let code = codes[i];
+
+                if (code === RESET_CODE) {
+                    nextCode = 257;
+                    i++;
+                    if (i >= codes.length) break;
+                    code = codes[i];
+                    oldCode = code;
+                    finChar = code;
+                    output.push(finChar);
+                    continue;
+                }
+
+                const specialCase = (code >= nextCode);
+                const strBytes = [];
+
+                if (specialCase) {
+                    getString(oldCode, strBytes);
+                    strBytes.push(finChar);
+                } else {
+                    getString(code, strBytes);
+                }
+
+                // Output decoded string
+                for (let k = 0; k < strBytes.length; ++k) {
+                    output.push(strBytes[k]);
+                }
+
+                finChar = strBytes[0];
+
+                if (nextCode < MAX_CODES) {
+                    dict[nextCode] = { parent: oldCode, character: finChar };
+                    nextCode++;
+                }
+
+                oldCode = code;
+            }
+
+            return new Uint8Array(output);
+        }
+
+        // --- BUTTON ACTIONS ---
+
+        function executeCompression() {
+            const file = selectedFiles.compress;
+            if (!file) return;
+
+            document.getElementById('compress-spinner').style.display = 'inline-block';
+            document.getElementById('compress-action-btn').setAttribute('disabled', 'true');
+            document.getElementById('compress-error').style.display = 'none';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const t0 = performance.now();
+                    const arrayBuffer = e.target.result;
+                    const uint8Array = new Uint8Array(arrayBuffer);
+
+                    const result = compressData(uint8Array);
+                    const t1 = performance.now();
+
+                    const compBlob = new Blob([result.data], { type: 'application/octet-stream' });
+                    const downloadUrl = URL.createObjectURL(compBlob);
+
+                    const origSize = uint8Array.length;
+                    const compSize = result.data.length;
+                    const saved = origSize > 0 ? (1.0 - (compSize / origSize)) * 100 : 0;
+
+                    document.getElementById('comp-stat-size').textContent = formatBytes(compSize);
+                    document.getElementById('comp-stat-ratio').textContent = saved.toFixed(2) + '%';
+                    document.getElementById('comp-stat-unique').textContent = `${result.uniqueBytes} codes`;
+                    document.getElementById('comp-stat-time').textContent = `${(t1 - t0).toFixed(1)} ms`;
+
+                    // Generate Dictionary Table
+                    const tableBody = document.getElementById('codebook-body');
+                    tableBody.innerHTML = '';
+                    
+                    if (result.dictionaryEntries.length === 0) {
+                        tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No dictionary entries generated.</td></tr>';
+                    } else {
+                        result.dictionaryEntries.forEach(entry => {
+                            // Convert sequence array to text representation and hex
+                            let hexRep = entry.seq.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+                            let textRep = entry.seq.map(b => {
+                                if (b < 32 || b > 126) return '.';
+                                return String.fromCharCode(b);
+                            }).join('');
+
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td class="code-value">${entry.code}</td>
+                                <td><span style="font-family:monospace;color:var(--text-muted);">${hexRep}</span></td>
+                                <td><strong>${textRep}</strong></td>
+                                <td>${entry.seq.length} bytes</td>
+                            `;
+                            tableBody.appendChild(tr);
+                        });
+                    }
+
+                    const downloadBtn = document.getElementById('compress-download-btn');
+                    downloadBtn.onclick = () => {
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.download = file.name + '.huff';
+                        link.click();
+                    };
+
+                    document.getElementById('compress-result').style.display = 'block';
+
+                } catch (err) {
+                    document.getElementById('compress-error-text').textContent = err.message;
+                    document.getElementById('compress-error').style.display = 'flex';
+                } finally {
+                    document.getElementById('compress-spinner').style.display = 'none';
+                    document.getElementById('compress-action-btn').removeAttribute('disabled');
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function executeDecompression() {
+            const file = selectedFiles.decompress;
+            if (!file) return;
+
+            document.getElementById('decompress-spinner').style.display = 'inline-block';
+            document.getElementById('decompress-action-btn').setAttribute('disabled', 'true');
+            document.getElementById('decompress-error').style.display = 'none';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const t0 = performance.now();
+                    const arrayBuffer = e.target.result;
+                    const uint8Array = new Uint8Array(arrayBuffer);
+
+                    const restoredBytes = decompressData(uint8Array);
+                    const t1 = performance.now();
+
+                    const restoredBlob = new Blob([restoredBytes], { type: 'application/octet-stream' });
+                    const downloadUrl = URL.createObjectURL(restoredBlob);
+
+                    document.getElementById('dec-stat-size').textContent = formatBytes(restoredBytes.length);
+                    document.getElementById('dec-stat-time').textContent = `${(t1 - t0).toFixed(1)} ms`;
+
+                    const downloadBtn = document.getElementById('decompress-download-btn');
+                    
+                    let cleanName = 'restored_' + file.name;
+                    if (file.name.endsWith('.huff')) {
+                        cleanName = file.name.substring(0, file.name.length - 5);
+                    }
+
+                    downloadBtn.onclick = () => {
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.download = cleanName;
+                        link.click();
+                    };
+
+                    document.getElementById('decompress-result').style.display = 'block';
+
+                } catch (err) {
+                    document.getElementById('decompress-error-text').textContent = err.message;
+                    document.getElementById('decompress-error').style.display = 'flex';
+                } finally {
+                    document.getElementById('decompress-spinner').style.display = 'none';
+                    document.getElementById('decompress-action-btn').removeAttribute('disabled');
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+</html>
