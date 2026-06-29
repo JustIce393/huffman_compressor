@@ -89,15 +89,4 @@ huffman_compressor/
 └── verify.py / .ps1       <- Verification & compatibility test scripts
 ```
 
----
 
-## 💡 SDE Interview Q&A
-
-### Q1: The folder/classes are named `huffman`, but the algorithm implements LZW. Why?
-> This was a design choice to showcase two different paradigms of lossless compression. Huffman coding is **entropy-based** (using prefix codes based on character frequencies), requiring the compression tree to be stored inside the file header. LZW is **dictionary-based** (using repeating patterns), building the dictionary dynamically on-the-fly. Implementing LZW within the structural skeleton of the project demonstrates how dictionary patterns adapt to data streams and how binary layouts are designed.
-
-### Q2: Why does the dictionary reset at 65,536?
-> Caching codes as 16-bit integers is a sweet spot for performance and space. It keeps dictionary lookups fast and memory footprint low. If the dictionary kept growing indefinitely, it would consume massive amounts of memory, lookups would slow down, and codes would require wider integers (e.g. 24-bit or 32-bit), reducing the compression ratio. Emitting a `RESET_CODE` when full resets the dictionary, which also helps the compressor adapt to different phases of a file (e.g., a file switching from text to binary data).
-
-### Q3: How is binary compatibility achieved between C++ and JS?
-> By structuring serialization at the byte level. In C++, we use `out.put()` to write 16-bit codes split into little-endian bytes (`code & 0xFF` and `code >> 8`). In JS, we read the file into a `Uint8Array` buffer, verify the `LZW\x01` header, and reconstruct the 16-bit codes using binary bitwise shifts (`byte1 | (byte2 << 8)`). Both engines share the exact same dictionary rules and reset boundaries.
